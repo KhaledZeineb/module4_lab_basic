@@ -1,83 +1,113 @@
 package com.example.studentmanagement.controller;
 
+import com.example.studentmanagement.model.Course;
 import com.example.studentmanagement.model.Student;
+import com.example.studentmanagement.service.CourseService;
 import com.example.studentmanagement.service.StudentService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/students")
 public class StudentController {
 
     private final StudentService studentService;
+    private final CourseService courseService;
 
     @Autowired
-    public StudentController(StudentService studentService) {
+    public StudentController(StudentService studentService, CourseService courseService) {
         this.studentService = studentService;
-    }
-
-    @PostMapping
-    public ResponseEntity<Student> createStudent(@RequestBody Student student) {
-        Student savedStudent = studentService.saveStudent(student);
-        return new ResponseEntity<>(savedStudent, HttpStatus.CREATED);
+        this.courseService = courseService;
     }
 
     @GetMapping
-    public ResponseEntity<List<Student>> getAllStudents() {
-        List<Student> students = studentService.getAllStudents();
-        return new ResponseEntity<>(students, HttpStatus.OK);
+    public ResponseEntity<Page<Student>> getAllStudents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        Sort.Direction sortDirection = direction.equalsIgnoreCase("desc") ?
+                Sort.Direction.DESC : Sort.Direction.ASC;
+
+        Page<Student> students = studentService.getAllStudents(
+                PageRequest.of(page, size, Sort.by(sortDirection, sortBy)));
+
+        return ResponseEntity.ok(students);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Student> getStudentById(@PathVariable Long id) {
-        return studentService.getStudentById(id)
-                .map(student -> new ResponseEntity<>(student, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+        Optional<Student> student = studentService.getStudentById(id);
+        return student.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/major/{major}")
+    public ResponseEntity<Page<Student>> getStudentsByMajor(
+            @PathVariable String major,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "lastName") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        Sort.Direction sortDirection = direction.equalsIgnoreCase("desc") ?
+                Sort.Direction.DESC : Sort.Direction.ASC;
+
+        Page<Student> students = studentService.findByMajor(
+                major, PageRequest.of(page, size, Sort.by(sortDirection, sortBy)));
+
+        return ResponseEntity.ok(students);
+    }
+
+    @PostMapping
+    public ResponseEntity<Student> createStudent(@Valid @RequestBody Student student) {
+        Student savedStudent = studentService.saveStudent(student);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedStudent);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Student> updateStudent(@PathVariable Long id, @RequestBody Student student) {
-        student.setId(id);
-        try {
-            Student updatedStudent = studentService.updateStudent(student);
-            return new ResponseEntity<>(updatedStudent, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    public ResponseEntity<Student> updateStudent(@PathVariable Long id, @Valid @RequestBody Student studentDetails) {
+        Optional<Student> optionalStudent = studentService.getStudentById(id);
+        if (optionalStudent.isEmpty()) {
+            return ResponseEntity.notFound().build();
         }
+
+        Student student = optionalStudent.get();
+        student.setFirstName(studentDetails.getFirstName());
+        student.setLastName(studentDetails.getLastName());
+        student.setEmail(studentDetails.getEmail());
+        student.setAge(studentDetails.getAge());
+        student.setMajor(studentDetails.getMajor());
+
+        Student updatedStudent = studentService.saveStudent(student);
+        return ResponseEntity.ok(updatedStudent);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteStudent(@PathVariable Long id) {
+        if (!studentService.getStudentById(id).isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
         studentService.deleteStudent(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/major/{major}")
-    public ResponseEntity<List<Student>> getStudentsByMajor(@PathVariable String major) {
-        List<Student> students = studentService.getStudentsByMajor(major);
-        return new ResponseEntity<>(students, HttpStatus.OK);
-    }
-
-    @GetMapping("/younger-than/{age}")
-    public ResponseEntity<List<Student>> getStudentsYoungerThan(@PathVariable int age) {
-        List<Student> students = studentService.getStudentsYoungerThan(age);
-        return new ResponseEntity<>(students, HttpStatus.OK);
-    }
-
-    @GetMapping("/by-lastname/{pattern}")
-    public ResponseEntity<List<Student>> getStudentsByLastNamePattern(@PathVariable String pattern) {
-        List<Student> students = studentService.getStudentsByLastNamePattern(pattern);
-        return new ResponseEntity<>(students, HttpStatus.OK);
-    }
-
-    @GetMapping("/age-range")
-    public ResponseEntity<List<Student>> getStudentsInAgeRange(
-            @RequestParam int minAge, @RequestParam int maxAge) {
-        List<Student> students = studentService.getStudentsInAgeRange(minAge, maxAge);
-        return new ResponseEntity<>(students, HttpStatus.OK);
+    @GetMapping("/{id}/courses")
+    public ResponseEntity<List<Course>> getEnrolledCourses(@PathVariable Long id) {
+        if (!studentService.getStudentById(id).isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Course> courses = courseService.getCoursesForStudent(id);
+        return ResponseEntity.ok(courses);
     }
 }

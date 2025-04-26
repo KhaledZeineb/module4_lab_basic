@@ -1,27 +1,26 @@
 package com.example.studentmanagement.service;
 
 import com.example.studentmanagement.model.Student;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface StudentService {
-
-    Student saveStudent(Student student);
-
     List<Student> getAllStudents();
+
+    Page<Student> getAllStudents(Pageable pageable);
 
     Optional<Student> getStudentById(Long id);
 
-    Student updateStudent(Student student);
+    Student saveStudent(Student student);
 
     void deleteStudent(Long id);
 
-    List<Student> getStudentsByMajor(String major);
+    List<Student> findByMajor(String major);
 
-    List<Student> getStudentsYoungerThan(int age);
+    Page<Student> findByMajor(String major, Pageable pageable);
 
-    List<Student> getStudentsByLastNamePattern(String pattern);
-
-    List<Student> getStudentsInAgeRange(int minAge, int maxAge);
+    List<Student> getStudentsEnrolledInCourse(Long courseId);
 }
